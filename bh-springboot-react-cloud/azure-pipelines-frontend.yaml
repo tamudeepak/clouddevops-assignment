@@ -1,0 +1,51 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  imageName: 'frontend-app'
+
+stages:
+- stage: Build
+  jobs:
+  - job: Build
+    steps:
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '16.x'
+    - script: |
+        cd src/main/js
+        npm install
+        npm run build
+      displayName: 'Install and build frontend'
+
+- stage: BuildDockerImage
+  dependsOn: Build
+  jobs:
+  - job: BuildDockerImage
+    steps:
+    - task: Docker@2
+      inputs:
+        command: 'buildAndPush'
+        repository: 'your-azure-container-registry.azurecr.io/$(imageName)'
+        dockerfile: '**/Dockerfile.frontend'
+        containerRegistry: 'your-service-connection-to-acr'
+        tags: |
+          $(Build.BuildId)
+
+- stage: Deploy
+  dependsOn: BuildDockerImage
+  jobs:
+  - deployment: DeployFrontend
+    environment: 'development'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: 'your-service-connection-to-azure'
+              appName: 'your-frontend-app-service'
+              package: '$(Build.ArtifactStagingDirectory)/drop'

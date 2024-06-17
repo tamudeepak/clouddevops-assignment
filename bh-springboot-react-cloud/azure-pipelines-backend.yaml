@@ -1,0 +1,61 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  imageName: 'backend-app'
+
+stages:
+- stage: Build
+  jobs:
+  - job: Build
+    steps:
+    - task: Maven@3
+      inputs:
+        mavenPomFile: 'pom.xml'
+        goals: 'package'
+        options: '--batch-mode'
+    - task: CopyFiles@2
+      inputs:
+        SourceFolder: '$(System.DefaultWorkingDirectory)'
+        Contents: '**/target/*.jar'
+        TargetFolder: '$(Build.ArtifactStagingDirectory)'
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'drop'
+
+- stage: BuildDockerImage
+  dependsOn: Build
+  jobs:
+  - job: BuildDockerImage
+    steps:
+    - task: Docker@2
+      inputs:
+        command: 'buildAndPush'
+        repository: 'your-azure-container-registry.azurecr.io/$(imageName)'
+        dockerfile: '**/Dockerfile.backend'
+        containerRegistry: 'your-service-connection-to-acr'
+        tags: |
+          $(Build.BuildId)
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'drop'
+
+- stage: Deploy
+  dependsOn: BuildDockerImage
+  jobs:
+  - deployment: DeployBackend
+    environment: 'development'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: 'your-service-connection-to-azure'
+              appName: 'your-backend-app-service'
+              package: '$(Build.ArtifactStagingDirectory)/drop/*.jar'

@@ -1,0 +1,10 @@
+# Use an official node image to build the application
+FROM node:16 as builder
+WORKDIR /app
+COPY src/main/js .
+RUN npm install
+RUN npm run build
+
+# Use an official nginx image to serve the frontend
+FROM nginx:alpine
+COPY --from=builder /app/build /usr/share/nginx/html
